@@ -319,12 +319,29 @@ body{font-family:var(--sans);background:var(--bg);color:var(--tx);display:flex}
     <!-- LOGIN -->
     <div class="auth-card" id="login-card">
       <div class="auth-title">Bem-vindo de volta</div>
-      <div class="auth-sub">Entre com sua conta para acessar as finanças do casal.</div>
+      <div class="auth-sub">Entre com sua conta para acessar as financas do casal.</div>
       <div class="ff"><label>E-mail</label><input type="email" id="l-email" placeholder="seu@email.com" autocomplete="email"></div>
-      <div class="ff"><label>Senha</label><input type="password" id="l-pass" placeholder="Sua senha"></div>
+      <div class="ff">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
+          <label style="margin-bottom:0">Senha</label>
+          <span onclick="showReset()" style="font-size:12px;color:var(--acc);cursor:pointer;font-weight:500">Esqueci a senha</span>
+        </div>
+        <input type="password" id="l-pass" placeholder="Sua senha">
+      </div>
       <div class="auth-err" id="l-err"></div>
       <button class="btn-p" id="l-btn" onclick="doLogin()">Entrar</button>
       <div class="auth-switch">Primeira vez? <span onclick="showRegister()">Criar conta</span></div>
+    </div>
+
+    <!-- RESET PASSWORD -->
+    <div class="auth-card" id="reset-card" style="display:none">
+      <div class="auth-title">Recuperar senha</div>
+      <div class="auth-sub">Digite seu e-mail e enviaremos um link para criar uma nova senha.</div>
+      <div class="ff"><label>E-mail</label><input type="email" id="rst-email" placeholder="seu@email.com" autocomplete="email"></div>
+      <div class="auth-err" id="rst-err"></div>
+      <div id="rst-ok" style="display:none;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);border-radius:9px;padding:10px 13px;font-size:12px;color:var(--green)"></div>
+      <button class="btn-p" id="rst-btn" onclick="doReset()">Enviar link de recuperacao</button>
+      <div class="auth-switch"><span onclick="showLogin()">Voltar para o login</span></div>
     </div>
 
     <!-- REGISTER -->
@@ -502,7 +519,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--tx);display:flex}
 <!-- FIREBASE SDKs -->
 <script type="module">
 import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import{getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,onAuthStateChanged}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import{getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,onAuthStateChanged,sendPasswordResetEmail}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import{getFirestore,doc,collection,addDoc,setDoc,updateDoc,deleteDoc,onSnapshot,query,where,orderBy,getDoc}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const FB={apiKey:"AIzaSyCkD4up6wXc9pnR8U8mYAm8hS8X7vKljwk",authDomain:"fincoach-a5ed9.firebaseapp.com",projectId:"fincoach-a5ed9",storageBucket:"fincoach-a5ed9.firebasestorage.app",messagingSenderId:"988692128262",appId:"1:988692128262:web:09619d0beccb0f5d5a5987"};
@@ -564,8 +581,9 @@ function showApp(){
 }
 
 // REGISTER
-window.showRegister=()=>{document.getElementById("login-card").style.display="none";document.getElementById("reg-card").style.display="flex";}
-window.showLogin=()=>{document.getElementById("reg-card").style.display="none";document.getElementById("login-card").style.display="flex";}
+window.showRegister=()=>{document.getElementById("login-card").style.display="none";document.getElementById("reg-card").style.display="flex";document.getElementById("reset-card").style.display="none";}
+window.showReset=()=>{document.getElementById("login-card").style.display="none";document.getElementById("reg-card").style.display="none";document.getElementById("reset-card").style.display="flex";document.getElementById("rst-err").classList.remove("on");document.getElementById("rst-ok").style.display="none";}
+window.showLogin=()=>{document.getElementById("reg-card").style.display="none";document.getElementById("reset-card").style.display="none";document.getElementById("login-card").style.display="flex";}
 
 window.doRegister=async()=>{
   const name=document.getElementById("r-name").value.trim();
@@ -618,6 +636,24 @@ window.doLogin=async()=>{
   }
 };
 
+window.doReset=async()=>{
+  const email=document.getElementById("rst-email").value.trim();
+  const err=document.getElementById("rst-err");
+  const ok=document.getElementById("rst-ok");
+  if(!email){err.textContent="Digite seu e-mail.";err.classList.add("on");return;}
+  const btn=document.getElementById("rst-btn");btn.disabled=true;btn.textContent="Enviando...";
+  try{
+    await sendPasswordResetEmail(auth,email);
+    err.classList.remove("on");
+    ok.style.display="block";
+    ok.textContent="E-mail enviado! Verifique sua caixa de entrada e spam.";
+    btn.textContent="E-mail enviado!";
+  }catch(e){
+    err.textContent=e.code==="auth/user-not-found"?"Nenhuma conta encontrada com este e-mail.":"Erro ao enviar e-mail. Tente novamente.";
+    err.classList.add("on");
+    btn.disabled=false;btn.textContent="Enviar link de recuperacao";
+  }
+};
 window.doLogout=async()=>{stopListeners();await signOut(auth);};
 
 // REALTIME LISTENERS
