@@ -777,6 +777,42 @@ function sChat(){const a=document.getElementById("chat");setTimeout(()=>a.scroll
 window.sendSugg=(btn)=>{document.getElementById("ai-inp").value=btn.textContent;sendAI();}
 window.aiKey=(e)=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendAI();}}
 window.aiResize=(el)=>{el.style.height="auto";el.style.height=Math.min(el.scrollHeight,110)+"px";}
+
+window.openEditTx=(id)=>{
+  const tx=S.txs.find(t=>t._id===id);
+  if(!tx)return;
+  const{a,b}=S.couple;
+  const cats=tx.type==="expense"?CE:CI;
+  document.getElementById("et-cat").innerHTML=cats.map(c=>"<option value='"+c.id+"'>"+c.icon+" "+c.name+"</option>").join("");
+  document.getElementById("et-who").innerHTML=[a,b].filter(Boolean).map(m=>"<option value='"+m+"'>"+m+"</option>").join("");
+  document.getElementById("et-desc").value=tx.desc;
+  document.getElementById("et-amt").value=tx.amount;
+  document.getElementById("et-date").value=tx.date;
+  document.getElementById("et-cat").value=tx.cat;
+  document.getElementById("et-who").value=tx.who;
+  document.getElementById("et-id").value=id;
+  document.getElementById("et-type").value=tx.type;
+  document.getElementById("ov-edit-tx").classList.add("on");
+};
+window.saveEditTx=async()=>{
+  const id=document.getElementById("et-id").value;
+  const desc=document.getElementById("et-desc").value.trim();
+  const amount=parseFloat(document.getElementById("et-amt").value);
+  const date=document.getElementById("et-date").value;
+  const cat=document.getElementById("et-cat").value;
+  const who=document.getElementById("et-who").value;
+  if(!desc||!amount||!date)return;
+  await fbSet("txs",id,{desc,amount,date,cat,who});
+  closeOv("ov-edit-tx");
+  toast("Lancamento atualizado",desc+" · "+R(amount),"ok");
+};
+window.deleteTx=async()=>{
+  const id=document.getElementById("et-id").value;
+  if(!confirm("Excluir este lancamento?"))return;
+  await fbDel("txs",id);
+  closeOv("ov-edit-tx");
+  toast("Lancamento excluido","","");
+};
 </script>
 
 <!-- MODAL EDITAR LANÇAMENTO -->
