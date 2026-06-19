@@ -424,7 +424,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--tx);display:flex}
       </div>
     </div>
     <div class="page ai-page" id="page-ai">
-      <div class="topbar"><div class="tb-l"><h1>Consultor IA</h1><p>Seu parceiro financeiro inteligente</p></div></div>
+      <div class="topbar"><div class="tb-l"><h1>Consultor IA</h1><p>Seu parceiro financeiro inteligente</p></div><div class="tb-r"><button class="btn-sec" onclick="clearChat()" style="font-size:12px;padding:7px 12px">&#128465; Limpar</button></div></div>
       <div class="chat-area" id="chat">
         <div class="ai-intro" id="ai-intro"><div class="ai-av">&#10022;</div><h3 id="ai-hi2">Ola! Sou o FinCoach</h3><p id="ai-desc">Tenho acesso completo as financas de voces. Pode perguntar!</p><div class="ai-suggs"><button class="ai-sugg" onclick="sendSugg(this)">Quanto gastamos este mes?</button><button class="ai-sugg" onclick="sendSugg(this)">Projetos no prazo?</button><button class="ai-sugg" onclick="sendSugg(this)">Onde economizar?</button><button class="ai-sugg" onclick="sendSugg(this)">Resumo do mes</button></div></div>
       </div>
@@ -675,6 +675,32 @@ function startListeners(){
     });
     S.unsubs.push(unsub);
   }
+  // Load chat history
+  loadChatHistory();
+}
+
+async function loadChatHistory(){
+  const fid=S.familyId;if(!fid)return;
+  try{
+    const chatDoc=await getDoc(doc(db,"families",fid,"settings","chat"));
+    if(chatDoc.exists()){
+      const msgs=chatDoc.data().messages||[];
+      if(msgs.length>0){
+        S.chatMsgs=msgs;
+        document.getElementById("ai-intro")?.remove();
+        msgs.forEach(m=>apMsg(m.role,m.content));
+      }
+    }
+  }catch(e){console.log("No chat history");}
+}
+
+async function saveChatHistory(){
+  const fid=S.familyId;if(!fid)return;
+  try{
+    // Save last 20 messages only
+    const recent=S.chatMsgs.slice(-20);
+    await setDoc(doc(db,"families",fid,"settings","chat"),{messages:recent,updatedAt:new Date().toISOString()});
+  }catch(e){console.log("Could not save chat");}
 }
 function stopListeners(){S.unsubs.forEach(u=>u());S.unsubs=[];}
 
@@ -769,11 +795,30 @@ window.toast=(title,body,cls)=>{const el=document.createElement("div");el.classN
 
 // AI CHAT
 function buildCtx(){const inc=S.txs.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount,0);const exp=S.txs.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);const now=new Date();const ct={};S.txs.filter(t=>t.type==="expense").forEach(t=>{const c=cAt(t.cat);ct[c.name]=(ct[c.name]||0)+t.amount;});return"CASAL: "+S.couple.name+" - "+now.toLocaleString("pt-BR",{month:"long",year:"numeric"})+"\nRESUMO: Receitas "+R(inc)+" | Despesas "+R(exp)+" | Saldo "+R(inc-exp)+"\nCATEGORIAS: "+Object.entries(ct).map(([k,v])=>k+": "+R(v)).join(", ")+"\nORCAMENTOS: "+S.budgets.map(b=>{const s=S.txs.filter(t=>t.type==="expense"&&t.cat===b.cat).reduce((s,t)=>s+t.amount,0);return b.name+": "+R(s)+"/"+R(b.limit)+" ("+Math.round(s/b.limit*100)+"%)";}).join(" | ")+"\nCONTAS: "+S.accounts.map(a=>a.name+"("+a.type+"): "+R(a.balance)).join(", ")+"\nOBJETIVOS: "+S.goals.map(g=>g.title+": meta "+R(g.target)).join(" | ")+"\nPROJETOS: "+S.projects.map(p=>p.name+": "+R(p.saved)+"/"+R(p.total)+" ("+p.deadline+")").join(" | ")+"\nTX: "+S.txs.slice(0,8).map(t=>t.date+"|"+t.who+"|"+cAt(t.cat).name+"|"+t.desc+"|"+R(t.amount)).join(" / ");}
-function sysP(){return"Voce e o FinCoach, consultor financeiro de "+S.couple.name+" ("+S.couple.a+" e "+S.couple.b+"). Tom acolhedor, direto. Use voces. Portugues do Brasil. Max 3 paragrafos.\n\nDADOS:\n"+buildCtx()+"\n\nREGRAS: Nunca invente numeros. Nunca julgue gastos. Termine alertas com acao concreta.";}
+function sysP(){
+  const today=new Date().toISOString().split("T")[0];
+  const a=S.couple.a, b=S.couple.b, nm=S.couple.name;
+  return "Voce e o FinCoach, assistente de "+nm+" ("+a+" e "+b+").\n\nREGRAS:\n- Respostas CURTAS. Max 2 linhas.\n- Portugues do Brasil. Use voces.\n- Nunca invente numeros.\n\nPARA LANCAR DESPESA OU RECEITA:\nSe o usuario pedir para lancar, registrar ou adicionar qualquer gasto ou receita, responda APENAS com este formato exato:\nABRIR_LANCAMENTO:{\"type\":\"expense\",\"desc\":\"Nome\",\"amount\":0,\"date\":\""+today+"\",\"cat\":\"food\",\"who\":\""+a+"\",\"forma\":\"pix\"}END\nAjuste os valores conforme o pedido. Para receita use type:income e cat:salary/commission/sale/yield/other-inc.\nCats despesa: food,home,transport,health,leisure,edu,clothing,pet,other\n\nDADOS:\n"+buildCtx();
+}
 
 
 
-window.sendAI=async()=>{const inp=document.getElementById("ai-inp");const txt=inp.value.trim();if(!txt||S.aiLoading)return;document.getElementById("ai-intro")?.remove();inp.value="";inp.style.height="auto";S.aiLoading=true;document.getElementById("ai-btn").disabled=true;S.chatMsgs.push({role:"user",content:txt});apMsg("user",txt);const tp=document.createElement("div");tp.className="msg ai";tp.id="typing";tp.innerHTML="<div class='m-av ai'>✦</div><div class='bubble'><div class='typing'><span></span><span></span><span></span></div></div>";document.getElementById("chat").appendChild(tp);sChat();try{const res=await fetch("https://fincoach-ai.tiagofonseca60.workers.dev",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({system:sysP(),messages:S.chatMsgs})});const data=await res.json();const reply=data.text||"Nao consegui processar.";tp.remove();S.chatMsgs.push({role:"assistant",content:reply});apMsg("ai",reply);}catch(e){tp.remove();const fb=fallback(txt);S.chatMsgs.push({role:"assistant",content:fb});apMsg("ai",fb);}S.aiLoading=false;document.getElementById("ai-btn").disabled=false;}
+
+window.sendAI=async()=>{const inp=document.getElementById("ai-inp");const txt=inp.value.trim();if(!txt||S.aiLoading)return;document.getElementById("ai-intro")?.remove();inp.value="";inp.style.height="auto";S.aiLoading=true;document.getElementById("ai-btn").disabled=true;S.chatMsgs.push({role:"user",content:txt});apMsg("user",txt);const tp=document.createElement("div");tp.className="msg ai";tp.id="typing";tp.innerHTML="<div class='m-av ai'>✦</div><div class='bubble'><div class='typing'><span></span><span></span><span></span></div></div>";document.getElementById("chat").appendChild(tp);sChat();try{const res=await fetch("https://fincoach-ai.tiagofonseca60.workers.dev",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({system:sysP(),messages:S.chatMsgs})});const data=await res.json();const reply=data.text||"Nao consegui processar.";tp.remove();S.chatMsgs.push({role:"assistant",content:reply});
+    // Check if AI wants to open a form
+    if(reply.includes("ABRIR_LANCAMENTO:")){
+      const jsonStr=reply.match(/ABRIR_LANCAMENTO:(.*?)(?:END|$)/s)?.[1]?.trim();
+      try{
+        const parsed=JSON.parse(jsonStr);
+        const cleanReply=reply.replace(/ABRIR_LANCAMENTO:.*?(?:END|$)/s,"").trim();
+        apMsg("ai",cleanReply||"Abrindo o formulario para voce confirmar!");
+        saveChatHistory();
+        setTimeout(()=>launchFromAI(parsed),500);
+      }catch(e){apMsg("ai",reply);saveChatHistory();}
+    } else {
+      apMsg("ai",reply);saveChatHistory();
+    }
+  }catch(e){tp.remove();const fb=fallback(txt);S.chatMsgs.push({role:"assistant",content:fb});apMsg("ai",fb);saveChatHistory();}S.aiLoading=false;document.getElementById("ai-btn").disabled=false;}
 function fallback(q){const inc=S.txs.filter(t=>t.type==="income").reduce((s,t)=>s+t.amount,0);const exp=S.txs.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);const bal=inc-exp;if(!S.txs.length)return"Ola! Ainda nao ha lancamentos. Adicione receitas e despesas e farei analises detalhadas!";return"Resumo de "+S.couple.name+": Receitas "+R(inc)+" · Despesas "+R(exp)+" · Saldo "+R(bal);}
 function apMsg(role,text){const area=document.getElementById("chat");const div=document.createElement("div");div.className="msg "+role;const av=role==="ai"?"<div class='m-av ai'>✦</div>":"<div class='m-av user'>"+(S.couple.a||"U")[0].toUpperCase()+"</div>";const fmt=text.replace(/\*\*(.*?)\*\*/g,"<strong>$1</strong>").replace(/\n- /g,"<br>• ").replace(/\n/g,"<br>");div.innerHTML=av+"<div class='bubble'>"+fmt+"</div>";area.appendChild(div);sChat();}
 
@@ -782,6 +827,34 @@ function sChat(){const a=document.getElementById("chat");setTimeout(()=>a.scroll
 window.sendSugg=(btn)=>{document.getElementById("ai-inp").value=btn.textContent;sendAI();}
 window.aiKey=(e)=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendAI();}}
 window.aiResize=(el)=>{el.style.height="auto";el.style.height=Math.min(el.scrollHeight,110)+"px";}
+
+window.launchFromAI=(data)=>{
+  popModal();
+  openTxModal();
+  setTimeout(()=>{
+    if(data.type)setType(data.type);
+    if(data.desc)document.getElementById("f-desc").value=data.desc;
+    if(data.amount)document.getElementById("f-amt").value=data.amount;
+    if(data.date)document.getElementById("f-date").value=data.date;
+    if(data.cat){
+      const cats=data.type==="income"?CI:CE;
+      const found=cats.find(c=>c.id===data.cat||c.name.toLowerCase().includes(data.cat.toLowerCase()));
+      if(found)document.getElementById("f-cat").value=found.id;
+    }
+    if(data.who)document.getElementById("f-who").value=data.who;
+    if(data.forma){document.querySelectorAll("#seg-forma .seg-btn").forEach(b=>{if(b.getAttribute("onclick")&&b.getAttribute("onclick").includes(data.forma)){b.classList.add("on");S.curForma=data.forma;}else{b.classList.remove("on");}});}
+    toast("Formulario preenchido pela IA","Confira os dados e clique em Salvar!","info");
+  },300);
+};
+
+window.clearChat=async()=>{
+  if(!confirm("Limpar historico da conversa?"))return;
+  S.chatMsgs=[];
+  const fid=S.familyId;
+  if(fid)await setDoc(doc(db,"families",fid,"settings","chat"),{messages:[],updatedAt:new Date().toISOString()});
+  const chat=document.getElementById("chat");
+  chat.innerHTML='<div class="ai-intro" id="ai-intro"><div class="ai-av">&#10022;</div><h3>'+document.getElementById("ai-hi2").textContent+'</h3><p>Historico limpo! Pode perguntar.</p><div class="ai-suggs"><button class="ai-sugg" onclick="sendSugg(this)">Quanto gastamos este mes?</button><button class="ai-sugg" onclick="sendSugg(this)">Projetos no prazo?</button><button class="ai-sugg" onclick="sendSugg(this)">Onde economizar?</button><button class="ai-sugg" onclick="sendSugg(this)">Resumo do mes</button></div></div>';
+};
 
 // MIC / SPEECH TO TEXT
 let micRecognition=null;let micActive=false;
