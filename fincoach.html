@@ -153,6 +153,10 @@ body{font-family:var(--sans);background:var(--bg);color:var(--tx);display:flex}
 #ai-inp{flex:1;background:transparent;border:none;outline:none;color:var(--tx);font-family:var(--sans);font-size:13px;resize:none;line-height:1.5;max-height:110px;padding:5px 0}
 #ai-inp::placeholder{color:var(--tx3)}
 .ai-send{width:34px;height:34px;border-radius:9px;background:var(--acc2);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:opacity .15s}
+.ai-mic{width:34px;height:34px;border-radius:9px;background:var(--bg4);border:1px solid var(--brd2);color:var(--tx2);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:all .15s}
+.ai-mic:hover{border-color:var(--acc);color:var(--acc)}
+.ai-mic.recording{background:var(--rd);border-color:var(--red);color:var(--red);animation:pulse-mic .8s ease-in-out infinite}
+@keyframes pulse-mic{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.7;transform:scale(1.08)}}
 .ai-send:hover{opacity:.85}.ai-send:disabled{opacity:.35;cursor:not-allowed}
 .ov{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
 .ov.on{opacity:1;pointer-events:auto}
@@ -424,7 +428,8 @@ body{font-family:var(--sans);background:var(--bg);color:var(--tx);display:flex}
       <div class="chat-area" id="chat">
         <div class="ai-intro" id="ai-intro"><div class="ai-av">&#10022;</div><h3 id="ai-hi2">Ola! Sou o FinCoach</h3><p id="ai-desc">Tenho acesso completo as financas de voces. Pode perguntar!</p><div class="ai-suggs"><button class="ai-sugg" onclick="sendSugg(this)">Quanto gastamos este mes?</button><button class="ai-sugg" onclick="sendSugg(this)">Projetos no prazo?</button><button class="ai-sugg" onclick="sendSugg(this)">Onde economizar?</button><button class="ai-sugg" onclick="sendSugg(this)">Resumo do mes</button></div></div>
       </div>
-      <div class="ai-bar"><div class="ai-wrap"><textarea id="ai-inp" rows="1" placeholder="Pergunte sobre as financas de voces..." onkeydown="aiKey(event)" oninput="aiResize(this)"></textarea><button class="ai-send" id="ai-btn" onclick="sendAI()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></button></div></div>
+      <div class="ai-bar"><div class="ai-wrap"><textarea id="ai-inp" rows="1" placeholder="Pergunte sobre as financas de voces..." onkeydown="aiKey(event)" oninput="aiResize(this)"></textarea><button class="ai-mic" id="ai-mic" onclick="toggleMic()" title="Enviar por audio"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
+          <button class="ai-send" id="ai-btn" onclick="sendAI()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></button></div></div>
     </div>
   </main>
 </div>
@@ -777,6 +782,44 @@ function sChat(){const a=document.getElementById("chat");setTimeout(()=>a.scroll
 window.sendSugg=(btn)=>{document.getElementById("ai-inp").value=btn.textContent;sendAI();}
 window.aiKey=(e)=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendAI();}}
 window.aiResize=(el)=>{el.style.height="auto";el.style.height=Math.min(el.scrollHeight,110)+"px";}
+
+// MIC / SPEECH TO TEXT
+let micRecognition=null;let micActive=false;
+window.toggleMic=()=>{
+  if(!("webkitSpeechRecognition" in window||"SpeechRecognition" in window)){
+    toast("Audio nao suportado","Use Chrome ou Edge para gravar audio.","");return;
+  }
+  if(micActive){
+    micRecognition?.stop();return;
+  }
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  micRecognition=new SR();
+  micRecognition.lang="pt-BR";
+  micRecognition.continuous=false;
+  micRecognition.interimResults=true;
+  micActive=true;
+  document.getElementById("ai-mic").classList.add("recording");
+  document.getElementById("ai-inp").placeholder="Ouvindo...";
+  micRecognition.onresult=(e)=>{
+    let txt="";
+    for(let i=e.resultIndex;i<e.results.length;i++){txt+=e.results[i][0].transcript;}
+    document.getElementById("ai-inp").value=txt;
+  };
+  micRecognition.onend=()=>{
+    micActive=false;
+    document.getElementById("ai-mic").classList.remove("recording");
+    document.getElementById("ai-inp").placeholder="Pergunte sobre as financas de voces...";
+    const txt=document.getElementById("ai-inp").value.trim();
+    if(txt)sendAI();
+  };
+  micRecognition.onerror=(e)=>{
+    micActive=false;
+    document.getElementById("ai-mic").classList.remove("recording");
+    document.getElementById("ai-inp").placeholder="Pergunte sobre as financas de voces...";
+    toast("Erro no microfone","Verifique as permissoes do navegador.","");
+  };
+  micRecognition.start();
+};
 
 window.openEditTx=(id)=>{
   const tx=S.txs.find(t=>t._id===id);
